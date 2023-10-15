@@ -1,3 +1,4 @@
+import {v4 as uuidv4} from 'uuid';
 import * as tc from '@actions/tool-cache';
 import * as hc from '@actions/http-client';
 import * as core from '@actions/core';
@@ -88,7 +89,11 @@ export default abstract class BaseDistribution {
   }
 
   protected findVersionInHostedToolCacheDirectory() {
-    return tc.find('node', this.nodeInfo.versionSpec, this.nodeInfo.arch);
+    return tc.find(
+      'node',
+      this.nodeInfo.versionSpec,
+      this.translateArchToDistUrl(this.nodeInfo.arch)
+    );
   }
 
   protected async getNodeJsVersions(): Promise<INodeVersion[]> {
@@ -127,8 +132,12 @@ export default abstract class BaseDistribution {
     try {
       downloadPath = await tc.downloadTool(info.downloadUrl);
     } catch (err) {
-      if (err instanceof tc.HTTPError && err.httpStatusCode == 404) {
-        return await this.acquireNodeFromFallbackLocation(
+      if (
+        err instanceof tc.HTTPError &&
+        err.httpStatusCode == 404 &&
+        this.osPlat == 'win32'
+      ) {
+        return await this.acquireWindowsNodeFromFallbackLocation(
           info.resolvedVersion,
           info.arch
         );
@@ -151,16 +160,15 @@ export default abstract class BaseDistribution {
     return {range: valid, options};
   }
 
-  protected async acquireNodeFromFallbackLocation(
+  protected async acquireWindowsNodeFromFallbackLocation(
     version: string,
     arch: string = os.arch()
   ): Promise<string> {
     const initialUrl = this.getDistributionUrl();
     const osArch: string = this.translateArchToDistUrl(arch);
 
-    // Create temporary folder to download in to
-    const tempDownloadFolder: string =
-      'temp_' + Math.floor(Math.random() * 2000000000);
+    // Create temporary folder to download to
+    const tempDownloadFolder = `temp_${uuidv4()}`;
     const tempDirectory = process.env['RUNNER_TEMP'] || '';
     assert.ok(tempDirectory, 'Expected RUNNER_TEMP to be defined');
     const tempDir: string = path.join(tempDirectory, tempDownloadFolder);
